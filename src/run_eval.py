@@ -17,7 +17,9 @@ import re
 import sys
 from pathlib import Path
 
-RESULTS = Path(__file__).resolve().parent.parent / "results"
+ROOT = Path(__file__).resolve().parent.parent
+RESULTS = ROOT / "results"
+CONTEXTS = ROOT / "data" / "contexts"
 
 
 def parse_answer(text):
@@ -129,6 +131,14 @@ def main():
                 for i in have], n=1, max_tokens=320)
             for i, o in zip(have, outs):
                 hints[i] = o[0].strip()
+
+    # dump every generated context, so leakage can be audited afterwards
+    CONTEXTS.mkdir(parents=True, exist_ok=True)
+    with open(CONTEXTS / ("%s_contexts.json" % args.tag), "w", encoding="utf-8") as f:
+        json.dump({"gold": golds,
+                   "hints": hints,
+                   "feedback_binary": fb_bin,
+                   "feedback_diag": fb_diag}, f, indent=2, ensure_ascii=False)
 
     # ---- 3. teacher, per condition -----------------------------------------
     RESULTS.mkdir(exist_ok=True)

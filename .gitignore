@@ -3,5 +3,6 @@ __pycache__/
 .venv/
 .ipynb_checkpoints/
 results/raw/*.jsonl
+!data/contexts/*.json
 *.pt
 *.safetensors
