@@ -66,14 +66,19 @@ def main():
 
     rows = []
     for cond in conds:
-        teacher_rows = [{"problem": r["problem"], "correct": r["correct"]}
-                        for r in load(args.tag, cond)]
+        raw = load(args.tag, cond)
+        teacher_rows = [{"problem": r["problem"], "correct": r["correct"]} for r in raw]
         gap, lo, hi = bootstrap_gap(teacher_rows, student_rows)
+        # recovery rate: of the rollouts the student got wrong AND that received
+        # privileged context, how many does the self-teacher fix?
+        failed = [r for r in raw if not r["student_correct"] and r["used_context"]]
+        recovery = sum(r["correct"] for r in failed) / len(failed) if failed else float("nan")
         rows.append({
             "condition": cond,
             "label": LABELS.get(cond, cond),
             "teacher_acc": summary["conditions"][cond]["teacher_acc"],
             "gap": gap, "ci_lo": lo, "ci_hi": hi,
+            "recovery": recovery, "n_failed": len(failed),
             "n_with_context": summary["conditions"][cond]["n_with_context"],
         })
 
@@ -81,19 +86,22 @@ def main():
 
     csv_path = RESULTS / "gaps.csv"
     with open(csv_path, "w", encoding="utf-8") as f:
-        f.write("condition,teacher_acc,gap,ci_lo,ci_hi,n_with_context\n")
+        f.write("condition,teacher_acc,gap,ci_lo,ci_hi,recovery,n_failed,n_with_context\n")
         for r in rows:
-            f.write("%s,%.4f,%.4f,%.4f,%.4f,%d\n" % (
+            f.write("%s,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d\n" % (
                 r["condition"], r["teacher_acc"], r["gap"], r["ci_lo"],
-                r["ci_hi"], r["n_with_context"]))
+                r["ci_hi"], r["recovery"], r["n_failed"], r["n_with_context"]))
 
     print("student acc = %.3f   (%s, %d problems x %d samples)" % (
         summary["student_acc"], summary["model"],
         summary["n_problems"], summary["n_samples"]))
-    print("%-26s %9s %9s %18s" % ("condition", "acc", "gap", "95% CI"))
+    print("%-26s %7s %8s %18s %9s" % ("condition", "acc", "gap", "95% CI", "recovery"))
     for r in rows:
-        print("%-26s %9.3f %+9.3f   [%+.3f, %+.3f]" % (
-            r["label"], r["teacher_acc"], r["gap"], r["ci_lo"], r["ci_hi"]))
+        print("%-26s %7.3f %+8.3f   [%+.3f, %+.3f] %8.3f" % (
+            r["label"], r["teacher_acc"], r["gap"], r["ci_lo"], r["ci_hi"],
+            r["recovery"]))
+    print("\nrecovery = of the student's failed rollouts that got context, "
+          "the share the self-teacher fixes")
 
     FIGURES.mkdir(exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 4.5))
