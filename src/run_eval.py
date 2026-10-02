@@ -1,13 +1,13 @@
-"""Misura il gap student vs self-teacher su GSM8K, senza training.
+"""Measure the student vs self-teacher gap on GSM8K, without training.
 
-Pipeline (specchio del loro eval a 1 step con lr=0):
-  1. rollout dello STUDENT: n campioni per problema, punteggio 0/1
-  2. costruzione del contesto privilegiato, SOLO per i rollout falliti
+Mirrors their 1-step eval with lr=0:
+  1. student rollouts: n samples per problem, 0/1 score
+  2. build privileged context, only for failed rollouts
      (dont_reprompt_on_self_success=True)
-  3. rollout del TEACHER per ogni campione (prompt nudo dove non c'e' contesto)
-  4. gap = acc(teacher) - acc(student), sulle stesse N*n unita'
+  3. teacher rollout for every sample (bare prompt where there is no context)
+  4. gap = acc(teacher) - acc(student) over the same N*n rollouts
 
-Uso:
+Usage:
   python src/run_eval.py --n-problems 100 --n-samples 8 --model Qwen/Qwen3-1.7B
 """
 import argparse
@@ -21,7 +21,7 @@ RESULTS = Path(__file__).resolve().parent.parent / "results"
 
 
 def parse_answer(text):
-    """Numero finale. Prima cerca '#### x', poi l'ultimo numero del testo."""
+    """Final number: look for '#### x' first, then the last number in the text."""
     m = re.findall(r"####\s*\$?(-?[\d,]*\.?\d+)", text)
     if not m:
         m = re.findall(r"(-?[\d,]*\.?\d+)", text)
@@ -71,7 +71,7 @@ def main():
               max_model_len=4096, enforce_eager=True)
 
     def chat(prompts, n=1, max_tokens=None):
-        """enable_thinking=False, come nel loro eval."""
+        """enable_thinking=False, as in their eval."""
         texts = [tok.apply_chat_template([{"role": "user", "content": p}],
                                          tokenize=False, add_generation_prompt=True,
                                          enable_thinking=False) for p in prompts]
@@ -84,14 +84,14 @@ def main():
     n_q = len(questions)
 
     # ---- 1. student --------------------------------------------------------
-    print("[1/4] student: %d problemi x %d campioni" % (n_q, n_s))
+    print("[1/4] student: %d problems x %d samples" % (n_q, n_s))
     student = chat([C.student_prompt(q) for q in questions], n=n_s)
     ok = [[correct(t, golds[i]) for t in student[i]] for i in range(n_q)]
     student_acc = sum(sum(r) for r in ok) / (n_q * n_s)
     print("      student acc = %.3f" % student_acc)
 
-    # ---- 2. contesto privilegiato ------------------------------------------
-    # peer = un rollout corretto DIVERSO da se stesso (cfr. _get_solution)
+    # ---- 2. privileged context ---------------------------------------------
+    # peer = a correct rollout other than this one (cf. _get_solution)
     peers = [[None] * n_s for _ in range(n_q)]
     for i in range(n_q):
         succ = [j for j in range(n_s) if ok[i][j]]
@@ -99,16 +99,16 @@ def main():
             cand = [k for k in succ if k != j]
             peers[i][j] = student[i][cand[0]] if cand else None
 
-    # feedback binario: solo per i falliti
+    # binary feedback: failed rollouts only
     fb_bin = [[None if ok[i][j] else
                C.BINARY_FEEDBACK.format(answer=parse_answer(student[i][j]))
                for j in range(n_s)] for i in range(n_q)]
 
-    # feedback diagnostico: una generazione per ogni rollout fallito
+    # diagnostic feedback: one generation per failed rollout
     fb_diag = [[None] * n_s for _ in range(n_q)]
     if "feedback_diag" in conds:
         idx = [(i, j) for i in range(n_q) for j in range(n_s) if not ok[i][j]]
-        print("[2/4] feedback diagnostico per %d rollout falliti" % len(idx))
+        print("[2/4] diagnostic feedback for %d failed rollouts" % len(idx))
         if idx:
             outs = chat([C.DIAG_FEEDBACK_TEMPLATE.format(problem=questions[i],
                                                          attempt=student[i][j],
@@ -117,11 +117,11 @@ def main():
             for (i, j), o in zip(idx, outs):
                 fb_diag[i][j] = o[0].strip()
 
-    # hint estratti da una soluzione peer (una volta per problema)
+    # hints extracted from a peer solution (once per problem)
     hints = [None] * n_q
     if "hints" in conds:
         have = [i for i in range(n_q) if any(ok[i])]
-        print("[3/4] estrazione hint per %d problemi con un peer corretto" % len(have))
+        print("[3/4] hint extraction for %d problems with a correct peer" % len(have))
         if have:
             outs = chat([C.HINT_EXTRACTION_TEMPLATE.format(
                 problem=questions[i],
@@ -130,12 +130,12 @@ def main():
             for i, o in zip(have, outs):
                 hints[i] = o[0].strip()
 
-    # ---- 3. teacher per condizione -----------------------------------------
+    # ---- 3. teacher, per condition -----------------------------------------
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / "raw").mkdir(exist_ok=True)
     summary = {"model": args.model, "n_problems": n_q, "n_samples": n_s,
                "seed": args.seed, "student_acc": student_acc, "conditions": {}}
-    prompt_examples = {}  # esempi reali di prompt del teacher, per ispezione
+    prompt_examples = {}  # real teacher prompts, kept for inspection
 
     for cond in conds:
         prompts, meta = [], []
@@ -144,7 +144,7 @@ def main():
             for j in range(n_s):
                 fb = fb_diag[i][j] if cond == "feedback_diag" else fb_bin[i][j]
                 if ok[i][j]:
-                    p = base  # gating: niente contesto a chi ha gia' risolto
+                    p = base  # gating: no context for rollouts already correct
                 else:
                     p = C.teacher_prompt(cond, questions[i], peer=peers[i][j],
                                          gt=gt_solutions[i], feedback=fb,
@@ -152,11 +152,11 @@ def main():
                 prompts.append(p)
                 meta.append((i, j, p != base))
         n_ctx = sum(m[2] for m in meta)
-        # tieni fino a 3 prompt reali CON contesto, per l'ispezione a posteriori
+        # keep up to 3 real prompts with context, for later inspection
         prompt_examples[cond] = [
             {"problem": meta[k][0], "sample": meta[k][1], "prompt": prompts[k]}
             for k in range(len(prompts)) if meta[k][2]][:3]
-        print("[4/4] teacher '%s': %d rollout (%d con contesto)" % (cond, len(prompts), n_ctx))
+        print("[4/4] teacher '%s': %d rollouts (%d with context)" % (cond, len(prompts), n_ctx))
         outs = chat(prompts, n=1)
         acc, rows = 0, []
         for (i, j, used), o in zip(meta, outs):
@@ -181,7 +181,7 @@ def main():
     ex_path = RESULTS / ("%s_prompt_examples.json" % args.tag)
     with open(ex_path, "w", encoding="utf-8") as f:
         json.dump(prompt_examples, f, indent=2, ensure_ascii=False)
-    print("\nscritti: %s e %s" % (out_path, ex_path))
+    print("\nwrote: %s and %s" % (out_path, ex_path))
 
 
 if __name__ == "__main__":

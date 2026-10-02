@@ -1,11 +1,11 @@
-"""Costruzione dei prompt del self-teacher per GSM8K.
+"""Self-teacher prompt construction for GSM8K.
 
-I template sono presi verbatim da Tufalabs/opsd-predictive-law
-(verl/trainer/config/actor/actor.yaml). L'unico riscritto e' il preambolo
-esperto, che nel loro repo e' specifico per la programmazione competitiva.
+Templates are copied verbatim from Tufalabs/opsd-predictive-law
+(verl/trainer/config/actor/actor.yaml). The only rewritten one is the expert
+preamble, which in their repo is specific to competitive programming.
 """
 
-# --- template verbatim dal repo Tufa -----------------------------------------
+# --- verbatim from the Tufa repo ---------------------------------------------
 REPROMPT_TEMPLATE = "{prompt}{solution}{feedback}\n\nCorrectly solve the original question."
 
 SOLUTION_TEMPLATE = "\n\nCorrect solution:\n\n{successful_previous_attempt}"
@@ -24,7 +24,7 @@ Correct solution:
 
 Output the 5-10 hints as a numbered list, one per line, with no extra commentary."""
 
-# --- adattato alla matematica (dichiarato nel README) ------------------------
+# --- rewritten for math (flagged in the README) ------------------------------
 STATIC_TEACHER_TEMPLATE = """You are an expert at grade-school math word problems. You master:
 - Translating a word problem into explicit quantities and a sequence of arithmetic steps.
 - Multi-step reasoning: rates, ratios, percentages, unit conversions, totals and differences.
@@ -51,7 +51,7 @@ Student attempt:
 Correct reference solution (for your eyes only, do not quote the final answer):
 {reference}"""
 
-# il feedback "ambiente" per la matematica: verificatore binario
+# the math equivalent of environment feedback: a binary verifier
 BINARY_FEEDBACK = "Your previous answer was {answer}, which is incorrect."
 
 ANSWER_INSTRUCTION = (
@@ -60,14 +60,14 @@ ANSWER_INSTRUCTION = (
 )
 
 CONDITIONS = [
-    "none",            # prompt nudo: baseline / sanity check (gap atteso ~ 0)
-    "static_math",     # preambolo esperto (loro: static_teacher1)
-    "feedback_binary", # verificatore binario (loro: feedback_only)
-    "feedback_diag",   # feedback diagnostico (nostra aggiunta)
-    "hints",           # 5-10 hint da soluzione peer (loro: correct_solution_processed)
-    "peer_solution",   # soluzione peer completa (loro: correct_solution_only)
-    "all",             # peer solution + feedback (loro: all)
-    "gt_solution",     # soluzione del dataset: TETTO, non e' una loro condizione
+    "none",            # bare prompt: baseline, gap should be ~0
+    "static_math",     # expert preamble (theirs: static_teacher1)
+    "feedback_binary", # binary verifier (theirs: feedback_only)
+    "feedback_diag",   # diagnostic feedback (added here)
+    "hints",           # 5-10 hints from a peer solution (theirs: correct_solution_processed)
+    "peer_solution",   # full peer solution (theirs: correct_solution_only)
+    "all",             # peer solution + feedback (theirs: all)
+    "gt_solution",     # dataset solution: ceiling, not one of their conditions
 ]
 
 
@@ -77,9 +77,9 @@ def student_prompt(question: str) -> str:
 
 def teacher_prompt(condition: str, question: str, *, peer=None, gt=None,
                    feedback=None, hints=None) -> str:
-    """Costruisce il prompt del teacher. Ritorna il prompt nudo (= student) se
-    per quella condizione il contesto privilegiato non e' disponibile,
-    replicando il gating di Tufa (mask False -> nessun segnale)."""
+    """Build the teacher prompt. Falls back to the bare student prompt when the
+    privileged context is unavailable, mirroring Tufa's gating (mask False means
+    no signal)."""
     base = student_prompt(question)
 
     if condition == "none":
@@ -106,8 +106,8 @@ def teacher_prompt(condition: str, question: str, *, peer=None, gt=None,
             return base
         solution_block = SOLUTION_TEMPLATE.format(successful_previous_attempt=gt)
     elif condition == "all":
-        # environment_feedback_only_without_solution=True: il feedback compare
-        # solo quando non c'e' soluzione peer da mostrare
+        # environment_feedback_only_without_solution=True: feedback only shows up
+        # when there is no peer solution to show
         if peer:
             solution_block = SOLUTION_TEMPLATE.format(successful_previous_attempt=peer)
         elif feedback:
@@ -115,7 +115,7 @@ def teacher_prompt(condition: str, question: str, *, peer=None, gt=None,
         else:
             return base
     else:
-        raise ValueError(f"condizione sconosciuta: {condition}")
+        raise ValueError(f"unknown condition: {condition}")
 
     return REPROMPT_TEMPLATE.format(prompt=base, solution=solution_block,
                                     feedback=feedback_block)

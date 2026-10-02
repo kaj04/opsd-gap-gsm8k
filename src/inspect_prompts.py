@@ -1,7 +1,7 @@
-"""Stampa un prompt di esempio per ogni condizione, senza GPU.
+"""Print one example prompt per condition. No GPU needed.
 
-Serve per il controllo anti answer-leakage prima di spendere GPU.
-Uso: python src/inspect_prompts.py
+Use it to check for answer leakage before spending GPU time.
+Usage: python src/inspect_prompts.py
 """
 import sys
 from pathlib import Path
@@ -30,12 +30,12 @@ def main():
         fb = FEEDBACK_DIAG if cond == "feedback_diag" else FEEDBACK_BIN
         p = C.teacher_prompt(cond, QUESTION, peer=PEER, gt=GT, feedback=fb, hints=HINTS)
         print("=" * 78)
-        print("CONDIZIONE: %s" % cond)
+        print("CONDITION: %s" % cond)
         print("=" * 78)
         print(p)
         print()
         leaked = "72" in p.replace(QUESTION, "")
-        print(">>> contiene la risposta finale (72)? %s" % ("SI" if leaked else "no"))
+        print(">>> leaks the final answer (72)? %s" % ("YES" if leaked else "no"))
         print()
 
 

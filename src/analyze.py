@@ -1,6 +1,6 @@
-"""Tabella + grafico dei gap, con intervalli di confidenza via bootstrap.
+"""Gap table and plot, with bootstrap confidence intervals.
 
-Uso: python src/analyze.py --tag run
+Usage: python src/analyze.py --tag run
 """
 import argparse
 import json
@@ -17,13 +17,13 @@ FIGURES = ROOT / "figures"
 
 LABELS = {
     "none": "none (baseline)",
-    "static_math": "preambolo esperto",
-    "feedback_binary": "feedback binario",
-    "feedback_diag": "feedback diagnostico",
-    "hints": "hint da peer",
-    "peer_solution": "soluzione peer",
+    "static_math": "expert preamble",
+    "feedback_binary": "binary feedback",
+    "feedback_diag": "diagnostic feedback",
+    "hints": "peer hints",
+    "peer_solution": "peer solution",
     "all": "peer + feedback",
-    "gt_solution": "soluzione gold (tetto)",
+    "gt_solution": "gold solution (ceiling)",
 }
 
 
@@ -33,7 +33,7 @@ def load(tag, cond):
 
 
 def bootstrap_gap(teacher, student, n_boot=2000, seed=0):
-    """Bootstrap a livello di problema (le unita' dentro un problema sono correlate)."""
+    """Bootstrap at the problem level: rollouts of the same problem are correlated."""
     rng = np.random.default_rng(seed)
     problems = sorted({r["problem"] for r in teacher})
     by_p = {p: ([], []) for p in problems}
@@ -60,7 +60,7 @@ def main():
     summary = json.load(open(RESULTS / ("%s_summary.json" % args.tag), encoding="utf-8"))
     conds = list(summary["conditions"].keys())
 
-    # lo "student" di riferimento e' la colonna student_correct, identica in ogni file
+    # the reference student is the student_correct column, identical across files
     student_rows = [{"problem": r["problem"], "correct": r["student_correct"]}
                     for r in load(args.tag, conds[0])]
 
@@ -87,10 +87,10 @@ def main():
                 r["condition"], r["teacher_acc"], r["gap"], r["ci_lo"],
                 r["ci_hi"], r["n_with_context"]))
 
-    print("student acc = %.3f   (%s, %d problemi x %d campioni)" % (
+    print("student acc = %.3f   (%s, %d problems x %d samples)" % (
         summary["student_acc"], summary["model"],
         summary["n_problems"], summary["n_samples"]))
-    print("%-26s %9s %9s %18s" % ("condizione", "acc", "gap", "CI 95%"))
+    print("%-26s %9s %9s %18s" % ("condition", "acc", "gap", "95% CI"))
     for r in rows:
         print("%-26s %9.3f %+9.3f   [%+.3f, %+.3f]" % (
             r["label"], r["teacher_acc"], r["gap"], r["ci_lo"], r["ci_hi"]))
@@ -106,11 +106,11 @@ def main():
     ax.set_yticklabels([r["label"] for r in rows])
     ax.axvline(0, color="#666", lw=0.8)
     ax.set_xlabel("gap = acc(self-teacher) - acc(student)")
-    ax.set_title("Gap per contesto privilegiato su GSM8K\n%s, %d problemi x %d campioni" % (
+    ax.set_title("Gap by privileged context on GSM8K\n%s, %d problems x %d samples" % (
         summary["model"], summary["n_problems"], summary["n_samples"]))
     fig.tight_layout()
     fig.savefig(FIGURES / "gaps.png", dpi=160)
-    print("\nscritti: %s e %s" % (csv_path, FIGURES / "gaps.png"))
+    print("\nwrote: %s and %s" % (csv_path, FIGURES / "gaps.png"))
 
 
 if __name__ == "__main__":
