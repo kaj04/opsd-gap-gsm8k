@@ -69,39 +69,54 @@ def main():
         raw = load(args.tag, cond)
         teacher_rows = [{"problem": r["problem"], "correct": r["correct"]} for r in raw]
         gap, lo, hi = bootstrap_gap(teacher_rows, student_rows)
-        # recovery rate: of the rollouts the student got wrong AND that received
-        # privileged context, how many does the self-teacher fix?
-        failed = [r for r in raw if not r["student_correct"] and r["used_context"]]
+        # recovery rate: of the rollouts the student got wrong, how many does the
+        # self-teacher fix? Denominator is every failed rollout, so conditions are
+        # comparable and `none` gives the plain-resampling baseline.
+        failed = [r for r in raw if not r["student_correct"]]
         recovery = sum(r["correct"] for r in failed) / len(failed) if failed else float("nan")
+        n_ctx_failed = sum(1 for r in failed if r["used_context"])
         rows.append({
             "condition": cond,
             "label": LABELS.get(cond, cond),
             "teacher_acc": summary["conditions"][cond]["teacher_acc"],
             "gap": gap, "ci_lo": lo, "ci_hi": hi,
             "recovery": recovery, "n_failed": len(failed),
+            "n_ctx_failed": n_ctx_failed,
             "n_with_context": summary["conditions"][cond]["n_with_context"],
         })
+
+    # `none` is the honest reference: same sampling path as the other conditions,
+    # no privileged context. Report everything relative to it as well.
+    base = next((r for r in rows if r["condition"] == "none"), None)
+    for r in rows:
+        r["gap_vs_none"] = r["gap"] - base["gap"] if base else float("nan")
+        r["recovery_vs_none"] = r["recovery"] - base["recovery"] if base else float("nan")
 
     rows.sort(key=lambda r: r["gap"])
 
     csv_path = RESULTS / "gaps.csv"
     with open(csv_path, "w", encoding="utf-8") as f:
-        f.write("condition,teacher_acc,gap,ci_lo,ci_hi,recovery,n_failed,n_with_context\n")
+        f.write("condition,teacher_acc,gap,ci_lo,ci_hi,gap_vs_none,"
+                "recovery,recovery_vs_none,n_failed,n_ctx_failed\n")
         for r in rows:
-            f.write("%s,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d\n" % (
-                r["condition"], r["teacher_acc"], r["gap"], r["ci_lo"],
-                r["ci_hi"], r["recovery"], r["n_failed"], r["n_with_context"]))
+            f.write("%s,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%.4f,%d,%d\n" % (
+                r["condition"], r["teacher_acc"], r["gap"], r["ci_lo"], r["ci_hi"],
+                r["gap_vs_none"], r["recovery"], r["recovery_vs_none"],
+                r["n_failed"], r["n_ctx_failed"]))
 
     print("student acc = %.3f   (%s, %d problems x %d samples)" % (
         summary["student_acc"], summary["model"],
         summary["n_problems"], summary["n_samples"]))
-    print("%-26s %7s %8s %18s %9s" % ("condition", "acc", "gap", "95% CI", "recovery"))
+    print("%-26s %7s %8s %9s %9s %9s %6s" % (
+        "condition", "acc", "gap", "vs none", "recovery", "vs none", "ctx"))
     for r in rows:
-        print("%-26s %7.3f %+8.3f   [%+.3f, %+.3f] %8.3f" % (
-            r["label"], r["teacher_acc"], r["gap"], r["ci_lo"], r["ci_hi"],
-            r["recovery"]))
-    print("\nrecovery = of the student's failed rollouts that got context, "
-          "the share the self-teacher fixes")
+        print("%-26s %7.3f %+8.3f %+9.3f %9.3f %+9.3f %6d" % (
+            r["label"], r["teacher_acc"], r["gap"], r["gap_vs_none"],
+            r["recovery"], r["recovery_vs_none"], r["n_ctx_failed"]))
+    print("\nrecovery = share of the student's failed rollouts the self-teacher fixes")
+    print("vs none  = same number minus `none`, which is plain resampling")
+    print("ctx      = failed rollouts that actually received privileged context")
+    print("failed rollouts: %d" % rows[0]["n_failed"])
 
     FIGURES.mkdir(exist_ok=True)
     fig, ax = plt.subplots(figsize=(8, 4.5))
