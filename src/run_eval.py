@@ -135,6 +135,7 @@ def main():
     (RESULTS / "raw").mkdir(exist_ok=True)
     summary = {"model": args.model, "n_problems": n_q, "n_samples": n_s,
                "seed": args.seed, "student_acc": student_acc, "conditions": {}}
+    prompt_examples = {}  # esempi reali di prompt del teacher, per ispezione
 
     for cond in conds:
         prompts, meta = [], []
@@ -151,6 +152,10 @@ def main():
                 prompts.append(p)
                 meta.append((i, j, p != base))
         n_ctx = sum(m[2] for m in meta)
+        # tieni fino a 3 prompt reali CON contesto, per l'ispezione a posteriori
+        prompt_examples[cond] = [
+            {"problem": meta[k][0], "sample": meta[k][1], "prompt": prompts[k]}
+            for k in range(len(prompts)) if meta[k][2]][:3]
         print("[4/4] teacher '%s': %d rollout (%d con contesto)" % (cond, len(prompts), n_ctx))
         outs = chat(prompts, n=1)
         acc, rows = 0, []
@@ -173,7 +178,10 @@ def main():
     out_path = RESULTS / ("%s_summary.json" % args.tag)
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
-    print("\nscritto: %s" % out_path)
+    ex_path = RESULTS / ("%s_prompt_examples.json" % args.tag)
+    with open(ex_path, "w", encoding="utf-8") as f:
+        json.dump(prompt_examples, f, indent=2, ensure_ascii=False)
+    print("\nscritti: %s e %s" % (out_path, ex_path))
 
 
 if __name__ == "__main__":
