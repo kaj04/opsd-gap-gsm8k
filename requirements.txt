@@ -1,0 +1,6 @@
+vllm>=0.15.0
+datasets>=3.0.0
+transformers>=4.57.0
+pandas
+matplotlib
+numpy
