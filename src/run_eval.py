@@ -2,13 +2,18 @@
 
 Mirrors their 1-step eval with lr=0:
   1. student rollouts: n samples per problem, 0/1 score
-  2. build privileged context, only for failed rollouts
+  2. privileged context, built from the dataset, for failed rollouts only
      (dont_reprompt_on_self_success=True)
-  3. teacher rollout for every sample (bare prompt where there is no context)
-  4. gap = acc(teacher) - acc(student) over the same N*n rollouts
+  3. teacher rollout on those, scored the same way
+  4. recovery = share of failed rollouts the self-teacher fixes
+
+Rollouts for samples the student already got right are identical across
+conditions (they all get the bare prompt), so they are generated once, as the
+`none` condition, and reused. That makes the comparison paired and cuts the cost
+by roughly the student's accuracy.
 
 Usage:
-  python src/run_eval.py --n-problems 100 --n-samples 8 --model Qwen/Qwen3-1.7B
+  python src/run_eval.py --n-problems 300 --n-samples 8 --model Qwen/Qwen3-1.7B
 """
 import argparse
 import json
@@ -43,14 +48,13 @@ def correct(text, gold):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--model", default="Qwen/Qwen3-1.7B")
-    ap.add_argument("--n-problems", type=int, default=100)
+    ap.add_argument("--n-problems", type=int, default=300)
     ap.add_argument("--n-samples", type=int, default=8)
     ap.add_argument("--temperature", type=float, default=0.7)
     ap.add_argument("--max-tokens", type=int, default=512)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--conditions", default=",".join([
-        "none", "static_math", "feedback_binary", "feedback_diag",
-        "hints", "peer_solution", "all", "gt_solution"]))
+    ap.add_argument("--conditions", default=None,
+                    help="comma separated; defaults to every condition")
     ap.add_argument("--tag", default="run")
     args = ap.parse_args()
 
@@ -61,12 +65,14 @@ def main():
     from vllm import LLM, SamplingParams
 
     random.seed(args.seed)
-    conds = args.conditions.split(",")
+    conds = args.conditions.split(",") if args.conditions else list(C.CONDITIONS)
+    if "none" not in conds:
+        conds = ["none"] + conds  # the ruler is mandatory
 
     ds = load_dataset("openai/gsm8k", "main", split="test").select(range(args.n_problems))
     questions = [r["question"] for r in ds]
-    gt_solutions = [r["answer"] for r in ds]
-    golds = [parse_answer(a) for a in gt_solutions]
+    answers = [r["answer"] for r in ds]
+    golds = [parse_answer(a) for a in answers]
 
     tok = AutoTokenizer.from_pretrained(args.model)
     llm = LLM(model=args.model, dtype="auto", gpu_memory_utilization=0.85,
@@ -82,116 +88,93 @@ def main():
         outs = llm.generate(texts, sp)
         return [[o.text for o in out.outputs] for out in outs]
 
-    n_s = args.n_samples
-    n_q = len(questions)
+    n_s, n_q = args.n_samples, len(questions)
 
     # ---- 1. student --------------------------------------------------------
-    print("[1/4] student: %d problems x %d samples" % (n_q, n_s))
+    print("[1/3] student: %d problems x %d samples" % (n_q, n_s))
     student = chat([C.student_prompt(q) for q in questions], n=n_s)
     ok = [[correct(t, golds[i]) for t in student[i]] for i in range(n_q)]
     student_acc = sum(sum(r) for r in ok) / (n_q * n_s)
-    print("      student acc = %.3f" % student_acc)
+    failed = [(i, j) for i in range(n_q) for j in range(n_s) if not ok[i][j]]
+    print("      student acc = %.3f, failed rollouts = %d" % (student_acc, len(failed)))
 
-    # ---- 2. privileged context ---------------------------------------------
-    # peer = a correct rollout other than this one (cf. _get_solution)
-    peers = [[None] * n_s for _ in range(n_q)]
-    for i in range(n_q):
-        succ = [j for j in range(n_s) if ok[i][j]]
-        for j in range(n_s):
-            cand = [k for k in succ if k != j]
-            peers[i][j] = student[i][cand[0]] if cand else None
+    # ---- 2. privileged contexts, from the dataset only ---------------------
+    # the distractor for wrong_solution: a fixed shuffle, so it is reproducible
+    perm = list(range(n_q))
+    random.Random(args.seed).shuffle(perm)
+    other = [perm[i] if perm[i] != i else (i + 1) % n_q for i in range(n_q)]
 
-    # binary feedback: failed rollouts only
-    fb_bin = [[None if ok[i][j] else
-               C.BINARY_FEEDBACK.format(answer=parse_answer(student[i][j]))
-               for j in range(n_s)] for i in range(n_q)]
+    contexts = {}   # condition -> per problem text or None
+    ctx_answer = {}  # condition -> the number the context points at, if any
+    for cond in conds:
+        contexts[cond] = [C.build_context(cond, answers[i],
+                                          other_answer=answers[other[i]],
+                                          seed=args.seed + i)
+                          for i in range(n_q)]
+        ctx_answer[cond] = [C.context_answer(c) if c else None for c in contexts[cond]]
 
-    # diagnostic feedback: one generation per failed rollout
-    fb_diag = [[None] * n_s for _ in range(n_q)]
-    if "feedback_diag" in conds:
-        idx = [(i, j) for i in range(n_q) for j in range(n_s) if not ok[i][j]]
-        print("[2/4] diagnostic feedback for %d failed rollouts" % len(idx))
-        if idx:
-            outs = chat([C.DIAG_FEEDBACK_TEMPLATE.format(problem=questions[i],
-                                                         attempt=student[i][j],
-                                                         reference=gt_solutions[i])
-                         for i, j in idx], n=1, max_tokens=160)
-            for (i, j), o in zip(idx, outs):
-                fb_diag[i][j] = o[0].strip()
-
-    # hints extracted from a peer solution (once per problem)
-    hints = [None] * n_q
-    if "hints" in conds:
-        have = [i for i in range(n_q) if any(ok[i])]
-        print("[3/4] hint extraction for %d problems with a correct peer" % len(have))
-        if have:
-            outs = chat([C.HINT_EXTRACTION_TEMPLATE.format(
-                problem=questions[i],
-                solution=student[i][[j for j in range(n_s) if ok[i][j]][0]])
-                for i in have], n=1, max_tokens=320)
-            for i, o in zip(have, outs):
-                hints[i] = o[0].strip()
-
-    # dump every generated context, so leakage can be audited afterwards
     CONTEXTS.mkdir(parents=True, exist_ok=True)
     with open(CONTEXTS / ("%s_contexts.json" % args.tag), "w", encoding="utf-8") as f:
-        json.dump({"gold": golds,
-                   "hints": hints,
-                   "feedback_binary": fb_bin,
-                   "feedback_diag": fb_diag}, f, indent=2, ensure_ascii=False)
+        json.dump({"gold": golds, "distractor_of": other,
+                   "contexts": contexts, "ctx_answer": ctx_answer},
+                  f, indent=2, ensure_ascii=False)
 
-    # ---- 3. teacher, per condition -----------------------------------------
+    # ---- 3. teacher rollouts ----------------------------------------------
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / "raw").mkdir(exist_ok=True)
     summary = {"model": args.model, "n_problems": n_q, "n_samples": n_s,
-               "seed": args.seed, "student_acc": student_acc, "conditions": {}}
-    prompt_examples = {}  # real teacher prompts, kept for inspection
+               "seed": args.seed, "student_acc": student_acc,
+               "n_failed": len(failed), "conditions": {}}
+    examples = {}
 
     for cond in conds:
-        prompts, meta = [], []
-        for i in range(n_q):
-            base = C.student_prompt(questions[i])
-            for j in range(n_s):
-                fb = fb_diag[i][j] if cond == "feedback_diag" else fb_bin[i][j]
-                if ok[i][j]:
-                    p = base  # gating: no context for rollouts already correct
-                else:
-                    p = C.teacher_prompt(cond, questions[i], peer=peers[i][j],
-                                         gt=gt_solutions[i], feedback=fb,
-                                         hints=hints[i])
-                prompts.append(p)
-                meta.append((i, j, p != base))
-        n_ctx = sum(m[2] for m in meta)
-        # keep up to 3 real prompts with context, for later inspection
-        prompt_examples[cond] = [
-            {"problem": meta[k][0], "sample": meta[k][1], "prompt": prompts[k]}
-            for k in range(len(prompts)) if meta[k][2]][:3]
-        print("[4/4] teacher '%s': %d rollouts (%d with context)" % (cond, len(prompts), n_ctx))
+        prompts = [C.teacher_prompt(cond, questions[i], contexts[cond][i])
+                   for i, j in failed]
+        n_ctx = sum(1 for i, j in failed if contexts[cond][i])
+        print("[3/3] teacher '%s': %d failed rollouts (%d with context)" % (
+            cond, len(prompts), n_ctx))
         outs = chat(prompts, n=1)
-        acc, rows = 0, []
-        for (i, j, used), o in zip(meta, outs):
-            c = correct(o[0], golds[i])
-            acc += c
+
+        rows, fixed, followed, n_follow_ctx = [], 0, 0, 0
+        for (i, j), o in zip(failed, outs):
+            text = o[0]
+            c = correct(text, golds[i])
+            fixed += c
+            ca = ctx_answer[cond][i]
+            got = parse_answer(text)
+            follows = (ca is not None and got is not None
+                       and abs(got - ca) < 1e-4 and not c)
+            if ca is not None:
+                n_follow_ctx += 1
+                followed += follows
             rows.append({"problem": i, "sample": j, "condition": cond,
-                         "used_context": used, "correct": bool(c),
-                         "student_correct": bool(ok[i][j])})
-        acc /= len(prompts)
-        summary["conditions"][cond] = {"teacher_acc": acc,
-                                       "gap": acc - student_acc,
-                                       "n_with_context": n_ctx}
-        print("      acc=%.3f  gap=%+.3f" % (acc, acc - student_acc))
+                         "used_context": bool(contexts[cond][i]),
+                         "correct": bool(c), "student_correct": False,
+                         "answer": got, "ctx_answer": ca,
+                         "followed_context": bool(follows)})
+
+        recovery = fixed / len(rows) if rows else float("nan")
+        follow_rate = followed / n_follow_ctx if n_follow_ctx else float("nan")
+        summary["conditions"][cond] = {
+            "recovery": recovery, "n_with_context": n_ctx,
+            "follow_wrong_rate": follow_rate, "n_follow_checked": n_follow_ctx}
+        print("      recovery=%.3f   follows the context's answer=%.3f" % (
+            recovery, follow_rate))
+
+        examples[cond] = [{"problem": i, "prompt": p}
+                          for (i, j), p in zip(failed, prompts)
+                          if contexts[cond][i]][:3]
         with open(RESULTS / "raw" / ("%s_%s.jsonl" % (args.tag, cond)), "w",
                   encoding="utf-8") as f:
             for r in rows:
                 f.write(json.dumps(r) + "\n")
 
-    out_path = RESULTS / ("%s_summary.json" % args.tag)
-    with open(out_path, "w", encoding="utf-8") as f:
+    with open(RESULTS / ("%s_summary.json" % args.tag), "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
-    ex_path = RESULTS / ("%s_prompt_examples.json" % args.tag)
-    with open(ex_path, "w", encoding="utf-8") as f:
-        json.dump(prompt_examples, f, indent=2, ensure_ascii=False)
-    print("\nwrote: %s and %s" % (out_path, ex_path))
+    with open(RESULTS / ("%s_prompt_examples.json" % args.tag), "w",
+              encoding="utf-8") as f:
+        json.dump(examples, f, indent=2, ensure_ascii=False)
+    print("\nwrote results/%s_summary.json" % args.tag)
 
 
 if __name__ == "__main__":

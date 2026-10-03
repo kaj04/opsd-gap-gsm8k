@@ -1,41 +1,36 @@
-"""Print one example prompt per condition. No GPU needed.
+"""Print one example teacher prompt per condition, on a real GSM8K item. No GPU.
 
-Use it to check for answer leakage before spending GPU time.
-Usage: python src/inspect_prompts.py
+Use it to sanity-check the contexts before spending GPU time.
+Usage: python src/inspect_prompts.py [--index 0]
 """
+import argparse
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import conditions as C  # noqa: E402
 
-QUESTION = ("Natalia sold clips to 48 of her friends in April, and then she sold "
-            "half as many clips in May. How many clips did Natalia sell altogether "
-            "in April and May?")
-GT = ("Natalia sold 48/2 = <<48/2=24>>24 clips in May.\n"
-      "Natalia sold 48+24 = <<48+24=72>>72 clips altogether in April and May.\n"
-      "#### 72")
-PEER = ("She sold 48 clips in April. In May she sold 48 / 2 = 24 clips. "
-        "In total 48 + 24 = 72.\n#### 72")
-FEEDBACK_BIN = C.BINARY_FEEDBACK.format(answer=96.0)
-FEEDBACK_DIAG = ("The first error is in the May step: you doubled the April amount "
-                 "instead of halving it.")
-HINTS = ("1. Read 'half as many' as a division, not a multiplication.\n"
-         "2. Compute the May amount before the total.\n"
-         "3. The question asks for the sum of both months.")
-
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--index", type=int, default=0)
+    args = ap.parse_args()
+
+    from datasets import load_dataset
+    ds = load_dataset("openai/gsm8k", "main", split="test")
+    item, other = ds[args.index], ds[args.index + 1]
+
     for cond in C.CONDITIONS:
-        fb = FEEDBACK_DIAG if cond == "feedback_diag" else FEEDBACK_BIN
-        p = C.teacher_prompt(cond, QUESTION, peer=PEER, gt=GT, feedback=fb, hints=HINTS)
+        ctx = C.build_context(cond, item["answer"], other_answer=other["answer"])
+        prompt = C.teacher_prompt(cond, item["question"], ctx)
         print("=" * 78)
         print("CONDITION: %s" % cond)
         print("=" * 78)
-        print(p)
+        print(prompt)
         print()
-        leaked = "72" in p.replace(QUESTION, "")
-        print(">>> leaks the final answer (72)? %s" % ("YES" if leaked else "no"))
+        gold = C.context_answer(item["answer"])
+        points_at = C.context_answer(ctx) if ctx else None
+        print(">>> gold answer: %s | the context points at: %s" % (gold, points_at))
         print()
 
 
