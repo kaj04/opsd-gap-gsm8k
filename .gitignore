@@ -2,7 +2,5 @@ __pycache__/
 *.pyc
 .venv/
 .ipynb_checkpoints/
-results/raw/*.jsonl
-!data/contexts/*.json
 *.pt
 *.safetensors

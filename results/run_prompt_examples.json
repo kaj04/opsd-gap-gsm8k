@@ -1,0 +1,73 @@
+{
+  "none": [],
+  "gold_step1": [
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 3,
+      "prompt": "James decides to run 3 sprints 3 times a week.  He runs 60 meters each sprint.  How many total meters does he run a week?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nHe sprints 3*3=9 times\n\nCorrectly solve the original question."
+    }
+  ],
+  "gold_steps": [
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\nHe increased the value of the house by 80,000*1.5=120,000\nSo the new value of the house is 120,000+80,000=$200,000\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\nHe increased the value of the house by 80,000*1.5=120,000\nSo the new value of the house is 120,000+80,000=$200,000\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 3,
+      "prompt": "James decides to run 3 sprints 3 times a week.  He runs 60 meters each sprint.  How many total meters does he run a week?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nHe sprints 3*3=9 times\n\nCorrectly solve the original question."
+    }
+  ],
+  "gt_solution": [
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\nHe increased the value of the house by 80,000*1.5=120,000\nSo the new value of the house is 120,000+80,000=$200,000\nSo he made a profit of 200,000-130,000=$70,000\n#### 70000\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\nHe increased the value of the house by 80,000*1.5=120,000\nSo the new value of the house is 120,000+80,000=$200,000\nSo he made a profit of 200,000-130,000=$70,000\n#### 70000\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 3,
+      "prompt": "James decides to run 3 sprints 3 times a week.  He runs 60 meters each sprint.  How many total meters does he run a week?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nHe sprints 3*3=9 times\nSo he runs 9*60=540 meters\n#### 540\n\nCorrectly solve the original question."
+    }
+  ],
+  "wrong_solution": [
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nHe sprints 3*3=9 times\nSo he runs 9*60=540 meters\n#### 540\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nHe sprints 3*3=9 times\nSo he runs 9*60=540 meters\n#### 540\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 3,
+      "prompt": "James decides to run 3 sprints 3 times a week.  He runs 60 meters each sprint.  How many total meters does he run a week?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nHalf of Raymond's jewels is 40/2 = 20\nSince Aaron has 5 more jewels than half of Raymond's jewels, he has 20+5 = 25 jewels.\nIf Siobhan has 2 fewer jewels than Aaron, he has 25-2 = 23 jewels.\n#### 23\n\nCorrectly solve the original question."
+    }
+  ],
+  "corrupted_solution": [
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\nHe increased the value of the house by 80,000*1.5=120,000\nSo the new value of the house is 120,000+80,000=$200,000\nSo he made a profit of 200,000-130,000=$70,000\n#### 69997\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 2,
+      "prompt": "Josh decides to try flipping a house.  He buys a house for $80,000 and then puts in $50,000 in repairs.  This increased the value of the house by 150%.  How much profit did he make?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nThe cost of the house and repairs came out to 80,000+50,000=$130,000\nHe increased the value of the house by 80,000*1.5=120,000\nSo the new value of the house is 120,000+80,000=$200,000\nSo he made a profit of 200,000-130,000=$70,000\n#### 69997\n\nCorrectly solve the original question."
+    },
+    {
+      "problem": 3,
+      "prompt": "James decides to run 3 sprints 3 times a week.  He runs 60 meters each sprint.  How many total meters does he run a week?\n\nSolve the problem step by step. End your reply with the final numeric answer on its own line, in the form: #### <number>\n\nCorrect solution:\n\nHe sprints 3*3=7 times\nSo he runs 7*60=538 meters\n#### 538\n\nCorrectly solve the original question."
+    }
+  ]
+}

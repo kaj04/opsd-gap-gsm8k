@@ -1,0 +1,46 @@
+{
+  "model": "Qwen/Qwen3-1.7B",
+  "n_problems": 300,
+  "n_samples": 8,
+  "seed": 0,
+  "student_acc": 0.8075,
+  "n_failed": 462,
+  "conditions": {
+    "none": {
+      "recovery": 0.25757575757575757,
+      "n_with_context": 0,
+      "follow_wrong_rate": NaN,
+      "n_follow_checked": 0
+    },
+    "gold_step1": {
+      "recovery": 0.4675324675324675,
+      "n_with_context": 462,
+      "follow_wrong_rate": NaN,
+      "n_follow_checked": 0
+    },
+    "gold_steps": {
+      "recovery": 0.6212121212121212,
+      "n_with_context": 462,
+      "follow_wrong_rate": NaN,
+      "n_follow_checked": 0
+    },
+    "gt_solution": {
+      "recovery": 0.9047619047619048,
+      "n_with_context": 462,
+      "follow_wrong_rate": 0.0,
+      "n_follow_checked": 462
+    },
+    "wrong_solution": {
+      "recovery": 0.3181818181818182,
+      "n_with_context": 462,
+      "follow_wrong_rate": 0.0,
+      "n_follow_checked": 462
+    },
+    "corrupted_solution": {
+      "recovery": 0.7077922077922078,
+      "n_with_context": 462,
+      "follow_wrong_rate": 0.08658008658008658,
+      "n_follow_checked": 462
+    }
+  }
+}
